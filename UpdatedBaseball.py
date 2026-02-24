@@ -9,7 +9,7 @@ class TrackManAnalysis:
     def __init__(self, root):
         self.root = root
         self.root.title("Trackman Pitching Analysis Development Program")
-        self.root.geometry("1200x850")
+        self.root.geometry("1400x900")
         self.root.configure(bg="#f0f0f0")
 
         # ===== HEADER =====
@@ -21,7 +21,7 @@ class TrackManAnalysis:
             text="Trackman Pitching Analysis Dashboard",
             fg="white",
             bg="#1f2c3c",
-            font=("Helvetica", 20, "bold")
+            font=("Helvetica", 22, "bold")
         ).pack()
 
         # ===== CONTROL PANEL =====
@@ -36,7 +36,7 @@ class TrackManAnalysis:
             bg="#2980b9",
             fg="white",
             padx=20,
-            pady=5
+            pady=8
         ).pack()
 
         # ===== SCROLLABLE AREA =====
@@ -59,7 +59,6 @@ class TrackManAnalysis:
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Enable mouse wheel scrolling
         self.canvas.bind_all("<MouseWheel>",
                              lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 
@@ -90,7 +89,6 @@ class TrackManAnalysis:
 
         df = df.dropna(subset=required_cols)
 
-        # Clear previous content
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
@@ -100,8 +98,8 @@ class TrackManAnalysis:
         usage = df['pitch_name'].value_counts()
         avg_speeds = df.groupby('pitch_name')['release_speed'].mean()
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-        plt.subplots_adjust(wspace=0.5, hspace=0.4)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+        plt.subplots_adjust(wspace=0.5)
 
         ax1.pie(usage, labels=usage.index, autopct='%1.1f%%', startangle=90)
         ax1.set_title("Pitch Usage Mix (%)")
@@ -119,36 +117,36 @@ class TrackManAnalysis:
 
         chart_canvas = FigureCanvasTkAgg(fig, master=self.scrollable_frame)
         chart_canvas.draw()
-        chart_canvas.get_tk_widget().pack(pady=20)
+        chart_canvas.get_tk_widget().pack(pady=25)
 
         # =============================
         # DASHBOARD METRICS
         # =============================
         metrics_frame = tk.Frame(self.scrollable_frame, bg="white")
-        metrics_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        metrics_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
 
         def section_title(title):
             tk.Label(
                 metrics_frame,
                 text=title,
-                font=("Helvetica", 16, "bold"),
+                font=("Helvetica", 18, "bold"),
                 bg="white",
                 fg="#1f2c3c",
-                pady=10
+                pady=15
             ).pack(anchor="w")
 
-        def metric_card(parent, title, value, color="#2c3e50"):
+        def metric_card(parent, title, value, row, column, color="#2c3e50"):
             card = tk.Frame(parent, bg="#ecf0f1", bd=2, relief="ridge")
-            card.pack(side=tk.LEFT, padx=10, pady=10)
+            card.grid(row=row, column=column, padx=25, pady=20, sticky="nsew")
 
             tk.Label(card, text=title,
-                     font=("Helvetica", 10, "bold"),
+                     font=("Helvetica", 11, "bold"),
                      bg="#ecf0f1",
-                     fg=color).pack(padx=15, pady=(10, 0))
+                     fg=color).pack(padx=25, pady=(15, 5))
 
             tk.Label(card, text=value,
-                     font=("Helvetica", 14),
-                     bg="#ecf0f1").pack(padx=15, pady=(0, 10))
+                     font=("Helvetica", 16),
+                     bg="#ecf0f1").pack(padx=25, pady=(0, 15))
 
         # =============================
         # PERFORMANCE
@@ -160,113 +158,21 @@ class TrackManAnalysis:
         avg_vel = df['release_speed'].mean()
         vel_std = df['release_speed'].std()
 
-        metric_card(perf_frame, "Avg Velocity", f"{avg_vel:.2f} MPH")
-        metric_card(perf_frame, "Velocity Std Dev", f"{vel_std:.2f}")
+        metric_card(perf_frame, "Avg Velocity", f"{avg_vel:.2f} MPH", 0, 0)
+        metric_card(perf_frame, "Velocity Std Dev", f"{vel_std:.2f}", 0, 1)
 
         if 'release_spin_rate' in df.columns:
             metric_card(perf_frame, "Avg Spin Rate",
-                        f"{df['release_spin_rate'].mean():.0f} RPM")
-
-        if 'pfx_x' in df.columns and 'pfx_z' in df.columns:
-            metric_card(perf_frame, "Avg Horizontal Break",
-                        f"{df['pfx_x'].mean():.2f}")
-            metric_card(perf_frame, "Avg Vertical Break",
-                        f"{df['pfx_z'].mean():.2f}")
+                        f"{df['release_spin_rate'].mean():.0f} RPM", 0, 2)
 
         # =============================
-        # COMMAND
-        # =============================
-        section_title("Command & Release Metrics")
-        cmd_frame = tk.Frame(metrics_frame, bg="white")
-        cmd_frame.pack(anchor="w")
-
-        if 'release_pos_x' in df.columns and 'release_pos_z' in df.columns:
-            metric_card(cmd_frame, "Release X",
-                        f"{df['release_pos_x'].mean():.2f}")
-            metric_card(cmd_frame, "Release Z",
-                        f"{df['release_pos_z'].mean():.2f}")
-
-        if 'plate_x' in df.columns and 'plate_z' in df.columns:
-            metric_card(cmd_frame, "Plate Location X",
-                        f"{df['plate_x'].mean():.2f}")
-            metric_card(cmd_frame, "Plate Location Z",
-                        f"{df['plate_z'].mean():.2f}")
-
-        # =============================
-        # OUTCOMES
-        # =============================
-        section_title("Pitch Outcomes")
-        outcome_frame = tk.Frame(metrics_frame, bg="white")
-        outcome_frame.pack(anchor="w")
-
-        if 'events' in df.columns:
-            outcomes = df['events'].value_counts().head(5)
-            for outcome, count in outcomes.items():
-                metric_card(outcome_frame, outcome, str(count))
-
-        # =============================
-        # PROFILE RECOMMENDATION
-        # =============================
-        section_title("Pitch Profile Recommendation")
-
-        profile_box = tk.Frame(metrics_frame, bg="#dfe6e9", bd=2, relief="solid")
-        profile_box.pack(fill=tk.X, padx=10, pady=10)
-
-        profile_text = ""
-
-        if avg_vel > 93 and 'release_spin_rate' in df.columns and df['release_spin_rate'].mean() > 2200:
-            profile_text = "Power Fastball Profile — Build arsenal around high velocity."
-        elif 'pfx_x' in df.columns and abs(df['pfx_x'].mean()) > 10:
-            profile_text = "Breaking Ball Specialist — Increase slider/curve usage."
-        else:
-            profile_text = "Command/Control Profile — Focus on sequencing and location."
-
-        tk.Label(profile_box, text=profile_text,
-                 font=("Helvetica", 12),
-                 bg="#dfe6e9",
-                 wraplength=900,
-                 justify="left").pack(padx=15, pady=15)
-
-        # =============================
-        # INJURY RISK
-        # =============================
-        section_title("Injury Risk Assessment")
-
-        injury_box = tk.Frame(metrics_frame, bd=2, relief="solid")
-        injury_box.pack(fill=tk.X, padx=10, pady=10)
-
-        injury_flag = False
-
-        if vel_std > 3:
-            injury_flag = True
-
-        if 'release_pos_x' in df.columns and 'release_pos_z' in df.columns:
-            release_consistency = df['release_pos_x'].std() + df['release_pos_z'].std()
-            if release_consistency > 1.5:
-                injury_flag = True
-
-        if injury_flag:
-            injury_box.configure(bg="#ff7675")
-            injury_text = "⚠ Mechanical inconsistency detected — Monitor workload."
-        else:
-            injury_box.configure(bg="#55efc4")
-            injury_text = "Delivery appears mechanically stable."
-
-        tk.Label(injury_box, text=injury_text,
-                 font=("Helvetica", 12, "bold"),
-                 bg=injury_box["bg"],
-                 wraplength=900,
-                 justify="left").pack(padx=15, pady=15)
-
-        # =============================
-        # OPTIMAL METRICS COMPARISON BY PITCH TYPE
+        # OPTIMAL METRICS COMPARISON
         # =============================
         section_title("Optimal Pitching Metrics Comparison (By Pitch Type)")
 
-        optimal_box = tk.Frame(metrics_frame, bg="#f1f2f6", bd=2, relief="solid")
-        optimal_box.pack(fill=tk.X, padx=10, pady=10)
+        optimal_container = tk.Frame(metrics_frame, bg="white")
+        optimal_container.pack(fill=tk.BOTH, expand=True, pady=15)
 
-                # Define optimal metrics per pitch type (example values)
         optimal_metrics_by_pitch = {
             "Fastball": {"Velocity": 95, "Spin Rate": 2300, "Horizontal Break": 2, "Vertical Break": 10},
             "4-Seam Fastball": {"Velocity": 96, "Spin Rate": 2350, "Horizontal Break": 1.5, "Vertical Break": 11},
@@ -278,68 +184,68 @@ class TrackManAnalysis:
             "Sweeper": {"Velocity": 85, "Spin Rate": 2450, "Horizontal Break": 6, "Vertical Break": 5}
         }
 
-        comparison_text = ""
         recommendations = []
+        row_index = 0
 
-        pitch_types = df['pitch_name'].unique()
-        for pitch in pitch_types:
+        for pitch in df['pitch_name'].unique():
             df_pitch = df[df['pitch_name'] == pitch]
-            comparison_text += f"\n{pitch}:\n"
+            opt = optimal_metrics_by_pitch.get(pitch)
 
-            opt = optimal_metrics_by_pitch.get(pitch, None)
-            if not opt:
-                comparison_text += "  No optimal data defined.\n"
-                continue
+            pitch_box = tk.Frame(optimal_container, bg="#f1f2f6", bd=2, relief="solid")
+            pitch_box.grid(row=row_index, column=0, sticky="ew", pady=15, padx=10)
 
-            # Velocity
-            avg_vel_pitch = df_pitch['release_speed'].mean()
-            comparison_text += f"  Velocity: {avg_vel_pitch:.1f} MPH (Optimal: {opt['Velocity']} MPH)\n"
-            if avg_vel_pitch < opt['Velocity']:
-                recommendations.append(f"- {pitch}: Increase velocity through lower-body and core strength training.")
+            tk.Label(pitch_box,
+                     text=pitch,
+                     font=("Helvetica", 15, "bold"),
+                     bg="#dcdde1").pack(fill=tk.X)
 
-            # Spin Rate
-            if 'release_spin_rate' in df.columns:
-                avg_spin_pitch = df_pitch['release_spin_rate'].mean()
-                comparison_text += f"  Spin Rate: {avg_spin_pitch:.0f} RPM (Optimal: {opt['Spin Rate']} RPM)\n"
-                if avg_spin_pitch < opt['Spin Rate']:
-                    recommendations.append(f"- {pitch}: Improve spin efficiency with grip and pronation mechanics.")
+            content = tk.Frame(pitch_box, bg="#f1f2f6")
+            content.pack(padx=25, pady=15)
 
-            # Horizontal Break
-            if 'pfx_x' in df.columns:
-                avg_hbreak = df_pitch['pfx_x'].mean()
-                comparison_text += f"  Horizontal Break: {avg_hbreak:.2f}\" (Optimal: {opt['Horizontal Break']}\")\n"
-                if abs(avg_hbreak) < opt['Horizontal Break']:
-                    recommendations.append(f"- {pitch}: Adjust arm slot or pitch mechanics to increase horizontal break.")
+            if opt:
+                avg_vel_pitch = df_pitch['release_speed'].mean()
+                tk.Label(content,
+                         text=f"Velocity: {avg_vel_pitch:.1f} MPH | Optimal: {opt['Velocity']} MPH",
+                         bg="#f1f2f6").pack(anchor="w", pady=4)
 
-            # Vertical Break
-            if 'pfx_z' in df.columns:
-                avg_vbreak = df_pitch['pfx_z'].mean()
-                comparison_text += f"  Vertical Break: {avg_vbreak:.2f}\" (Optimal: {opt['Vertical Break']}\")\n"
-                if abs(avg_vbreak) < opt['Vertical Break']:
-                    recommendations.append(f"- {pitch}: Optimize spin axis and release point for more vertical break.")
+                if avg_vel_pitch < opt['Velocity']:
+                    recommendations.append(f"- {pitch}: Improve lower-body power to increase velocity.")
 
-        tk.Label(optimal_box, text=comparison_text,
-                 font=("Helvetica", 12),
-                 bg="#f1f2f6",
-                 justify="left",
-                 wraplength=900).pack(padx=15, pady=15)
+                if 'release_spin_rate' in df.columns:
+                    avg_spin = df_pitch['release_spin_rate'].mean()
+                    tk.Label(content,
+                             text=f"Spin Rate: {avg_spin:.0f} RPM | Optimal: {opt['Spin Rate']} RPM",
+                             bg="#f1f2f6").pack(anchor="w", pady=4)
+
+                    if avg_spin < opt['Spin Rate']:
+                        recommendations.append(f"- {pitch}: Refine grip & wrist mechanics to increase spin.")
+
+            else:
+                tk.Label(content,
+                         text="No optimal data defined.",
+                         bg="#f1f2f6").pack(anchor="w")
+
+            row_index += 1
 
         # =============================
-        # RECOMMENDATIONS TO REACH OPTIMAL METRICS
+        # RECOMMENDATIONS
         # =============================
         section_title("Recommendations to Reach Optimal Metrics")
 
         recommend_box = tk.Frame(metrics_frame, bg="#fef9e7", bd=2, relief="solid")
-        recommend_box.pack(fill=tk.X, padx=10, pady=10)
+        recommend_box.pack(fill=tk.BOTH, expand=True, pady=15)
 
         if not recommendations:
-            recommendations.append("- All pitch metrics meet or exceed optimal values. Focus on consistency and command.")
+            recommendations.append("- All pitch metrics meet or exceed optimal values.")
 
-        tk.Label(recommend_box, text="\n".join(recommendations),
-                 font=("Helvetica", 12),
-                 bg="#fef9e7",
-                 justify="left",
-                 wraplength=900).pack(padx=15, pady=15)
+        for i, rec in enumerate(recommendations):
+            tk.Label(recommend_box,
+                     text=rec,
+                     font=("Helvetica", 12),
+                     bg="#fef9e7",
+                     anchor="w",
+                     justify="left",
+                     wraplength=1100).grid(row=i, column=0, sticky="w", padx=25, pady=8)
 
 
 # ===== RUN APPLICATION =====
