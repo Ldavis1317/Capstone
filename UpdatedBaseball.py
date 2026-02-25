@@ -4,6 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+# ===== XGBoost & ML imports =====
+from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix
 
 class TrackManAnalysis:
     def __init__(self, root):
@@ -15,7 +19,6 @@ class TrackManAnalysis:
         # ===== HEADER =====
         header = tk.Frame(self.root, bg="#1f2c3c", pady=20)
         header.pack(fill=tk.X)
-
         tk.Label(
             header,
             text="Trackman Pitching Analysis Dashboard",
@@ -27,7 +30,6 @@ class TrackManAnalysis:
         # ===== CONTROL PANEL =====
         control_panel = tk.Frame(self.root, bg="#f0f0f0", pady=10)
         control_panel.pack(fill=tk.X)
-
         tk.Button(
             control_panel,
             text="Import Trackman CSV",
@@ -45,7 +47,6 @@ class TrackManAnalysis:
 
         self.canvas = tk.Canvas(main_frame, bg="white")
         scrollbar = tk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-
         self.scrollable_frame = tk.Frame(self.canvas, bg="white")
 
         self.scrollable_frame.bind(
@@ -59,12 +60,8 @@ class TrackManAnalysis:
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.canvas.bind_all("<MouseWheel>",
-                             lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        self.canvas.bind_all("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 
-    # =============================
-    # CSV IMPORT
-    # =============================
     def import_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
         if file_path:
@@ -74,17 +71,10 @@ class TrackManAnalysis:
             except Exception as error:
                 messagebox.showerror("Error", f"Could not read CSV: {error}")
 
-    # =============================
-    # MAIN DASHBOARD
-    # =============================
     def plot_dashboard(self, df):
-
         required_cols = ['pitch_name', 'release_speed']
         if not all(col in df.columns for col in required_cols):
-            messagebox.showwarning(
-                "Warning",
-                "CSV must contain 'pitch_name' and 'release_speed'."
-            )
+            messagebox.showwarning("Warning", "CSV must contain 'pitch_name' and 'release_speed'.")
             return
 
         df = df.dropna(subset=required_cols)
@@ -93,7 +83,7 @@ class TrackManAnalysis:
             widget.destroy()
 
         # =============================
-        # CHART SECTION
+        # PITCH USAGE + VELOCITY
         # =============================
         usage = df['pitch_name'].value_counts()
         avg_speeds = df.groupby('pitch_name')['release_speed'].mean()
@@ -107,12 +97,9 @@ class TrackManAnalysis:
         bars = ax2.bar(avg_speeds.index, avg_speeds.values)
         ax2.set_title("Average Release Speed (MPH)")
         ax2.set_ylabel("MPH")
-
         for bar in bars:
             height = bar.get_height()
-            ax2.text(bar.get_x() + bar.get_width()/2., height,
-                     f'{height:.1f}', ha='center', va='bottom')
-
+            ax2.text(bar.get_x() + bar.get_width()/2., height, f'{height:.1f}', ha='center', va='bottom')
         plt.setp(ax2.get_xticklabels(), rotation=30)
 
         chart_canvas = FigureCanvasTkAgg(fig, master=self.scrollable_frame)
@@ -120,33 +107,19 @@ class TrackManAnalysis:
         chart_canvas.get_tk_widget().pack(pady=25)
 
         # =============================
-        # DASHBOARD METRICS
+        # METRICS FRAME
         # =============================
         metrics_frame = tk.Frame(self.scrollable_frame, bg="white")
         metrics_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
 
         def section_title(title):
-            tk.Label(
-                metrics_frame,
-                text=title,
-                font=("Helvetica", 18, "bold"),
-                bg="white",
-                fg="#1f2c3c",
-                pady=15
-            ).pack(anchor="w")
+            tk.Label(metrics_frame, text=title, font=("Helvetica", 18, "bold"), bg="white").pack(anchor="w", pady=15)
 
-        def metric_card(parent, title, value, row, column, color="#2c3e50"):
+        def metric_card(parent, title, value, row, column):
             card = tk.Frame(parent, bg="#ecf0f1", bd=2, relief="ridge")
             card.grid(row=row, column=column, padx=25, pady=20, sticky="nsew")
-
-            tk.Label(card, text=title,
-                     font=("Helvetica", 11, "bold"),
-                     bg="#ecf0f1",
-                     fg=color).pack(padx=25, pady=(15, 5))
-
-            tk.Label(card, text=value,
-                     font=("Helvetica", 16),
-                     bg="#ecf0f1").pack(padx=25, pady=(0, 15))
+            tk.Label(card, text=title, font=("Helvetica", 11, "bold"), bg="#ecf0f1").pack(padx=25, pady=(15, 5))
+            tk.Label(card, text=value, font=("Helvetica", 16), bg="#ecf0f1").pack(padx=25, pady=(0, 15))
 
         # =============================
         # PERFORMANCE
@@ -154,101 +127,104 @@ class TrackManAnalysis:
         section_title("Performance Metrics")
         perf_frame = tk.Frame(metrics_frame, bg="white")
         perf_frame.pack(anchor="w")
-
-        avg_vel = df['release_speed'].mean()
-        vel_std = df['release_speed'].std()
-
-        metric_card(perf_frame, "Avg Velocity", f"{avg_vel:.2f} MPH", 0, 0)
-        metric_card(perf_frame, "Velocity Std Dev", f"{vel_std:.2f}", 0, 1)
-
-        if 'release_spin_rate' in df.columns:
-            metric_card(perf_frame, "Avg Spin Rate",
-                        f"{df['release_spin_rate'].mean():.0f} RPM", 0, 2)
+        metric_card(perf_frame, "Avg Velocity", f"{df['release_speed'].mean():.2f} MPH", 0, 0)
 
         # =============================
-        # OPTIMAL METRICS COMPARISON
+        # XGBOOST STRIKE MODEL
         # =============================
-        section_title("Optimal Pitching Metrics Comparison (By Pitch Type)")
+        section_title("Advanced XGBoost Strike Probability Model")
+        if 'description' in df.columns:
+            strike_events = [
+                'called_strike', 'swinging_strike', 'swinging_strike_blocked',
+                'foul', 'foul_tip', 'hit_into_play'
+            ]
+            df['strike'] = df['description'].isin(strike_events).astype(int)
+            ml_features = ['release_speed', 'release_spin_rate', 'pfx_x', 'pfx_z']
 
-        optimal_container = tk.Frame(metrics_frame, bg="white")
-        optimal_container.pack(fill=tk.BOTH, expand=True, pady=15)
+            if all(col in df.columns for col in ml_features + ['strike']):
+                df_ml = df.dropna(subset=ml_features + ['strike']).copy()
+                X = df_ml[ml_features]
+                y = df_ml['strike']
 
-        optimal_metrics_by_pitch = {
-            "Fastball": {"Velocity": 95, "Spin Rate": 2300, "Horizontal Break": 2, "Vertical Break": 10},
-            "4-Seam Fastball": {"Velocity": 96, "Spin Rate": 2350, "Horizontal Break": 1.5, "Vertical Break": 11},
-            "Cutter": {"Velocity": 91, "Spin Rate": 2200, "Horizontal Break": 4, "Vertical Break": 8},
-            "Sinker": {"Velocity": 92, "Spin Rate": 2250, "Horizontal Break": 3, "Vertical Break": 9},
-            "Slider": {"Velocity": 87, "Spin Rate": 2500, "Horizontal Break": 5, "Vertical Break": 6},
-            "Curveball": {"Velocity": 78, "Spin Rate": 2600, "Horizontal Break": 3, "Vertical Break": 8},
-            "Changeup": {"Velocity": 83, "Spin Rate": 2100, "Horizontal Break": 2, "Vertical Break": 5},
-            "Sweeper": {"Velocity": 85, "Spin Rate": 2450, "Horizontal Break": 6, "Vertical Break": 5}
+                if y.nunique() > 1:
+                    X_train, X_test, y_train, y_test = train_test_split(
+                        X, y, test_size=0.25, random_state=42
+                    )
+                    model = XGBClassifier(
+                        n_estimators=300,
+                        max_depth=5,
+                        learning_rate=0.05,
+                        subsample=0.85,
+                        colsample_bytree=0.85,
+                        random_state=42,
+                        eval_metric='logloss'
+                    )
+                    model.fit(X_train, y_train)
+                    y_pred = model.predict(X_test)
+                    y_prob = model.predict_proba(X_test)[:, 1]
+
+                    accuracy = accuracy_score(y_test, y_pred)
+                    auc = roc_auc_score(y_test, y_prob)
+
+                    metric_card(perf_frame, "ML Strike Accuracy", f"{accuracy*100:.1f}%", 0, 1)
+                    metric_card(perf_frame, "ML Strike AUC", f"{auc:.3f}", 0, 2)
+
+
+                   
+
+        # =============================
+        # OPTIMAL METRICS
+        # =============================
+        section_title("Optimal Pitching Metrics Comparison")
+        optimal_metrics = {
+            "4-Seam Fastball": {"Velocity": 94, "Spin Rate": 2300},
+            "Fastball": {"Velocity": 94, "Spin Rate": 2300},
+            "Sinker": {"Velocity": 92, "Spin Rate": 2100},
+            "Cutter": {"Velocity": 88, "Spin Rate": 2400},
+            "Slider": {"Velocity": 85, "Spin Rate": 2500},
+            "Sweeper": {"Velocity": 83, "Spin Rate": 2600},
+            "Curveball": {"Velocity": 78, "Spin Rate": 2600},
+            "Changeup": {"Velocity": 84, "Spin Rate": 2000}
         }
 
         recommendations = []
-        row_index = 0
-
         for pitch in df['pitch_name'].unique():
             df_pitch = df[df['pitch_name'] == pitch]
-            opt = optimal_metrics_by_pitch.get(pitch)
+            avg_vel = df_pitch['release_speed'].mean()
+            avg_spin = df_pitch['release_spin_rate'].mean() if 'release_spin_rate' in df.columns else None
 
-            pitch_box = tk.Frame(optimal_container, bg="#f1f2f6", bd=2, relief="solid")
-            pitch_box.grid(row=row_index, column=0, sticky="ew", pady=15, padx=10)
+            box = tk.Frame(metrics_frame, bg="#f1f2f6", bd=2, relief="solid")
+            box.pack(fill=tk.X, pady=10)
+            tk.Label(box, text=pitch, font=("Helvetica", 14, "bold"), bg="#dcdde1").pack(fill=tk.X)
+            content = tk.Frame(box, bg="#f1f2f6")
+            content.pack(padx=20, pady=10)
 
-            tk.Label(pitch_box,
-                     text=pitch,
-                     font=("Helvetica", 15, "bold"),
-                     bg="#dcdde1").pack(fill=tk.X)
-
-            content = tk.Frame(pitch_box, bg="#f1f2f6")
-            content.pack(padx=25, pady=15)
-
+            opt = optimal_metrics.get(pitch)
             if opt:
-                avg_vel_pitch = df_pitch['release_speed'].mean()
-                tk.Label(content,
-                         text=f"Velocity: {avg_vel_pitch:.1f} MPH | Optimal: {opt['Velocity']} MPH",
-                         bg="#f1f2f6").pack(anchor="w", pady=4)
-
-                if avg_vel_pitch < opt['Velocity']:
-                    recommendations.append(f"- {pitch}: Improve lower-body power to increase velocity.")
-
-                if 'release_spin_rate' in df.columns:
-                    avg_spin = df_pitch['release_spin_rate'].mean()
-                    tk.Label(content,
-                             text=f"Spin Rate: {avg_spin:.0f} RPM | Optimal: {opt['Spin Rate']} RPM",
-                             bg="#f1f2f6").pack(anchor="w", pady=4)
-
+                tk.Label(content, text=f"Velocity: {avg_vel:.1f} MPH | Optimal: {opt['Velocity']} MPH", bg="#f1f2f6").pack(anchor="w")
+                if avg_vel < opt['Velocity']:
+                    recommendations.append(f"- {pitch}: Increase lower-body power to improve velocity.")
+                if avg_spin:
+                    tk.Label(content, text=f"Spin Rate: {avg_spin:.0f} RPM | Optimal: {opt['Spin Rate']} RPM", bg="#f1f2f6").pack(anchor="w")
                     if avg_spin < opt['Spin Rate']:
-                        recommendations.append(f"- {pitch}: Refine grip & wrist mechanics to increase spin.")
-
+                        recommendations.append(f"- {pitch}: Improve grip & wrist mechanics to increase spin.")
             else:
-                tk.Label(content,
-                         text="No optimal data defined.",
-                         bg="#f1f2f6").pack(anchor="w")
-
-            row_index += 1
+                tk.Label(content, text="No optimal benchmark defined.", bg="#f1f2f6").pack(anchor="w")
 
         # =============================
         # RECOMMENDATIONS
         # =============================
-        section_title("Recommendations to Reach Optimal Metrics")
-
-        recommend_box = tk.Frame(metrics_frame, bg="#fef9e7", bd=2, relief="solid")
-        recommend_box.pack(fill=tk.BOTH, expand=True, pady=15)
+        section_title("Development Recommendations")
+        rec_box = tk.Frame(metrics_frame, bg="#fef9e7", bd=2, relief="solid")
+        rec_box.pack(fill=tk.BOTH, expand=True, pady=10)
 
         if not recommendations:
-            recommendations.append("- All pitch metrics meet or exceed optimal values.")
+            recommendations.append("- All metrics meet or exceed optimal benchmarks.")
 
-        for i, rec in enumerate(recommendations):
-            tk.Label(recommend_box,
-                     text=rec,
-                     font=("Helvetica", 12),
-                     bg="#fef9e7",
-                     anchor="w",
-                     justify="left",
-                     wraplength=1100).grid(row=i, column=0, sticky="w", padx=25, pady=8)
+        for rec in recommendations:
+            tk.Label(rec_box, text=rec, bg="#fef9e7", font=("Helvetica", 12), anchor="w", justify="left").pack(anchor="w", padx=20, pady=5)
 
-
-# ===== RUN APPLICATION =====
+# ===== RUN APP =====
 root = tk.Tk()
 app = TrackManAnalysis(root)
 root.mainloop()
