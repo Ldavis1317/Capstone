@@ -58,7 +58,13 @@
         <div style="max-width: 500px; margin: 0 auto;"></div>
             <canvas id="sprayChart"></canvas>
         </div>
+    <div class="chart-box full-width" style="margin-top: 20px;;">
+        <h2>Pitch Location Heatmap</h2>
+        <div style ="max-width: 380px; margin: 0 auto;">
+            <canvas id="locationChart"></canvas>
+        </div>
     </div>
+</div>
 
 <!--Performance Tab-->
 <div id="performance" class="tab-content">
@@ -119,6 +125,7 @@ let usageChart;
 let velocityChart;
 let mlChart;
 let sprayChart;
+let locationChart;
 
 //mapping pitch codes to readable names and colors for charts.
 const pitchNames = {
@@ -310,6 +317,7 @@ function generateDashboard(data) {
     generateRecommendations(data, strikeCount, whiffCount);
     trainStrikeModel(data);
     generateSprayChart(data);
+    generateLocationChart(data);
 }
 
 //Pitch Comparison Table Generation
@@ -534,7 +542,108 @@ function generateSprayChart(data) {
             }
         });
     }
+//This function generates a strike zone image, and then plots the pitches and where they were in and around the zone for each pitch type.
+function generateLocationChart(data){
+    //Filter the data to remove empty rows and errors where location coordinates are not recorded.
+    const locData = data.filter(row=>row.plate_x !== null && row.plate_z !==null);
 
+    //This is an empty object where we will be storing the datasets which will be grouped by pitch type.
+    const datasets = {};
+
+    //Loop through each filtered pitch.
+    locData.forEach(row => {
+        //This gets the pitch type
+        const type = row.pitch_type || "Other";
+
+        //This section creates the chart settings for each pitch when it is seen for the first time.
+        if (!datasets[type]) {
+            datasets[type] = {
+                label: pitchNames[type] || type,
+                data: [],
+                backgroundColor: pitchColors[type] || "#bdc3c7",
+                pointRadius: 5,
+                borderColor: 'white',
+                borderWidth: 1
+            };
+        }
+        //This pairs the location coordinates to the pitch types.
+        datasets[type].data.push({ x: row.plate_x, y: row.plate_z });
+    });
+    //Destroy the chart if it doesnt exist
+    if (locationChart) locationChart.destroy();
+
+    //This Gets the 2d drwaing context for the strike zone
+    const ctx = document.getElementById('locationChart').getContext('2d');
+
+    //This defines the shape and layout of the actual strikezone behind the dots
+    const strikeZonePlugin = {
+        id: 'strikeZonePlugin',
+        beforeDraw: (chart) => {
+            //This simply makes the chart breakable into drawing tools
+            const { ctx, scales: { x, y }, chartArea: { top, left, width, height } } = chart;
+            
+            //This is the red/blue heatmap
+            const grad = ctx.createRadialGradient(
+                x.getPixelForValue(0), y.getPixelForValue(2.5), 15, 
+                x.getPixelForValue(0), y.getPixelForValue(2.5), 150 
+            );
+            grad.addColorStop(0, 'rgba(231, 76, 60, 0.3)'); 
+            grad.addColorStop(1, 'rgba(52, 152, 219, 0.1)'); 
+            ctx.fillStyle = grad;
+            ctx.fillRect(left, top, width, height);
+
+            ctx.strokeStyle = "rgba(0,0,0,0.8)";
+            ctx.lineWidth = 4;
+
+            //This calculates the pixel locations for the edge of the strike zone box
+            const xLeft = x.getPixelForValue(-0.85);
+            const xRight = x.getPixelForValue(0.85);
+            const yTop = y.getPixelForValue(3.5);
+            const yBot = y.getPixelForValue(1.5);
+            //This is the box for the strike zone
+            ctx.strokeRect(xLeft, yTop, xRight - xLeft, yBot - yTop);
+
+            ctx.setLineDash([5, 5]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+
+            //Vertical lines in the zone
+            ctx.moveTo(x.getPixelForValue(-0.28), yTop); ctx.lineTo(x.getPixelForValue(-0.28), yBot);
+            ctx.moveTo(x.getPixelForValue(0.28), yTop); ctx.lineTo(x.getPixelForValue(0.28), yBot);
+            //Horizontal Lines
+            ctx.moveTo(xLeft, y.getPixelForValue(2.83)); ctx.lineTo(xRight, y.getPixelForValue(2.83));
+            ctx.moveTo(xLeft, y.getPixelForValue(2.16)); ctx.lineTo(xRight, y.getPixelForValue(2.16));
+            ctx.stroke(); //Draws it
+            ctx.setLineDash([]); //Reset the line style so other parts of the chart dont get dashed out
+        }
+    };
+    //This part creates the chart with Chart.js. WE have 2 feet on either side of the zone, a ratio of 0.8 so that it is a taller zone, 
+    locationChart = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets: Object.values(datasets) },//make the data an array
+        plugins: [strikeZonePlugin],
+        options: {
+            aspectRatio: 0.8,
+            scales: {
+                x: { 
+                    min: -2.2, 
+                    max: 2.2, 
+                    title: { display: true, text: "Horizontal (ft)" },
+                    grid: { display: false }  // hide grid lines
+                },
+                y: { 
+                    min: 0, //This is the plate
+                    max: 5, // the zone is 5 feet tall
+                    title: { display: true, text: "Height (ft)" },
+                    grid: { display: false } 
+                }
+            },
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
 </script>
 
 </body>
