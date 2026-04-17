@@ -1,23 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    
+    <!--basic page setup, includes Chart.js and PapaParse for CSV handling and charting.-->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trackman Pitching Analysis Dashboard</title>
+
+    <!--external CSS file for styling the dashboard, charts, and layout.-->
     <link rel="stylesheet" href="styles.css">
 
+    <!--papaparse: used to read and parse the CSV files.-->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
+    <!--chart.js: used to generate graphs and charts.-->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
+    <!--page header.-->
 <header class="header">
     <h1>Trackman Pitching Analysis Dashboard</h1>
 </header>
 
+<!--file upload section for users to upload their Trackman CSV files.-->
 <section class="control-panel">
     <p>Upload a Trackman CSV file to be analyzed.</p>
+
+    <!--file input that accepts only CSV files, triggers the parsing and analysis when a file is selected.-->
     <input type="file" id="csvFile" accept=".csv">
 </section>
 <!--Tabs Section-->
@@ -49,11 +59,12 @@
             <canvas id="sprayChart"></canvas>
         </div>
     </div>
-</div>
 
 <!--Performance Tab-->
 <div id="performance" class="tab-content">
     <h2 class="section-title">Performance Metrics</h2>
+
+    <!--container tab where performance stats will be inserted dynamically.-->
     <div id="performanceContainer" class="card-container">
         <div class="metric-card">
             <h3>Please upload a file...</h3>
@@ -70,6 +81,8 @@
 <!--Recomendations Tab-->
 <div id="recommendations" class="tab-content">
     <h2 class="section-title">Development Recommendations</h2>
+
+    <!--list where recommendations will dynamically be added.-->
     <div class="recommendation-box">
         <ul id="recommendationsList">
             <li>Upload data to see personalized coaching insights.</li>
@@ -80,6 +93,8 @@
 <!--Machine Learning Model Tab-->
 <div id="mlmodel" class="tab-content">
     <h2 class="section-title">ML Strike vs Ball Probability Model</h2>
+
+    <!--displays model predictions.-->
     <div class="card-container">
         <div class="metric-card">
             <h3>Predicted Strike Probability</h3>
@@ -90,6 +105,8 @@
             <p id="ballProb">--</p>
         </div>
     </div>
+
+    <!--chart showing strike vs. ball probabilities.-->
     <div class="chart-box" style="margin-top:30px;">
         <canvas id="mlChart"></canvas>
     </div>
@@ -97,10 +114,13 @@
 
 <script>
 
+//chart objects (stored globally to readable names).
 let usageChart;
 let velocityChart;
 let mlChart;
 let sprayChart;
+
+//mapping pitch codes to readable names and colors for charts.
 const pitchNames = {
     "FF": "4-Seam Fastball",
     "SI": "Sinker",
@@ -114,6 +134,7 @@ const pitchNames = {
     "EP": "Eephus"
 };
 
+//color mapping for pitch types used in charts.
 const pitchColors = {
     "FF": "#d22d2d", // Red
     "SI": "#fe9d31", // Orange
@@ -123,6 +144,8 @@ const pitchColors = {
     "SL": "#ee00e1", // Pink
     "CU": "#00d1ed"  // Sky Blue
 };
+
+//colors for different hit outcomes in spray chart.
 const hitColors ={
     "single": "#2ecc71", // Green
     "double": "#3498db", // Blue
@@ -132,39 +155,53 @@ const hitColors ={
     "error": "#e74c3c"  // Red
 }
 //CSV Import Funciton
+// triggered when user selects a CSV file.
 document.getElementById("csvFile").addEventListener("change", function(event) {
+
+    // get the uploaded file.
     const file = event.target.files[0];
+
+    // if no file is selected, exit the function.
     if (!file) return;
 
+    // use PapaParse to read and parse the CSV file.
     Papa.parse(file, {
-        header: true,
-        dynamicTyping: true,
+        header: true,       // treat first row as column headers.
+        dynamicTyping: true,    // convert numbers automatically.
         complete: function(results) {
+
             // Filter out rows without a pitch type (e.g., empty rows at end of CSV)
             const data = results.data.filter(row => row.pitch_type);
+
+            // generate full dashboard with the parsed data.
             generateDashboard(data);
         }
     });
 });
 
-//Dashboard Data Generation
+// processes the raw CSV data and generates all charts, metrics, and recommendations for the dashboard.
 function generateDashboard(data) {
+
+    // objects to store aggregated data for each pitch type.
     const pitchCounts = {};
     const pitchVelocity = {};
     const pitchSpin = {};
     const pitchStrike = {};
     const pitchWhiff = {};
 
+    // totals for overall metrics.
     let totalVelocity = 0, velocityCount = 0;
     let totalSpin = 0, spinCount = 0;
     let strikeCount = 0, whiffCount = 0;
 
+    // loop through every pitch in dataset.
     data.forEach(row => {
         const pitch = row.pitch_type;
         const vel = row.release_speed;
         const spin = row.release_spin_rate;
         const desc = row.description || "";
 
+        // initialize values for each pitch type.
         if (!pitchCounts[pitch]) {
             pitchCounts[pitch] = 0;
             pitchVelocity[pitch] = [];
@@ -173,6 +210,7 @@ function generateDashboard(data) {
             pitchWhiff[pitch] = 0;
         }
 
+        // count pitch usage.
         pitchCounts[pitch]++;
 
         //Velocity Logic
@@ -201,6 +239,7 @@ function generateDashboard(data) {
         }
     });
 
+    // convert pitch codes into display labels and colors for charts.
     const pitchCodes = Object.keys(pitchCounts);
     const displayNames = pitchCodes.map(code => pitchNames[code] || code);
     const chartColors = pitchCodes.map(code => pitchColors[code] || "#bdc3c7");
@@ -266,6 +305,7 @@ function generateDashboard(data) {
         </div>
     `;
 
+    // call additional features to generate comparison tables, recommendations, ML model, and spray chart.
     generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts, data.length);
     generateRecommendations(data, strikeCount, whiffCount);
     trainStrikeModel(data);
@@ -273,7 +313,11 @@ function generateDashboard(data) {
 }
 
 //Pitch Comparison Table Generation
+// generates a comparison of the user's pitch metrics against optimal benchmarks for each pitch type.
 function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts, totalPitches) {
+
+    // predefined ideal benchmarks for certain pitch typed.
+    // used to compare actual performance vs optimal values.
     const optimalMetrics = {
         "FF": { velocity: 94, spin: 2300 },
         "SI": { velocity: 92, spin: 2100 },
@@ -282,20 +326,33 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
         "CH": { velocity: 84, spin: 2000 }
     };
 
+    // select container where pitch cards will be displayed.
     const container = document.getElementById("pitchContainer");
+
+    // clear previous results before adding new ones.
     container.innerHTML = "";
 
+    // loop through each pitch type.
     pitchCodes.forEach(code => {
+
+        // arrays of velocity and spin for the current pitch type.
         const velArr = pitchVelocity[code];
         const spinArr = pitchSpin[code];
+
+        // calculate average velocity, spin, strike percentage, whiff percentage, and usage percentage for the current pitch type.
         const avgVel = velArr.reduce((a, b) => a + b, 0) / velArr.length;
         const avgSpin = spinArr.length ? spinArr.reduce((a, b) => a + b, 0) / spinArr.length : 0;
         const strikePct = ((pitchStrike[code] / pitchCounts[code]) * 100).toFixed(1);
         const whiffPct = ((pitchWhiff[code] / pitchCounts[code]) * 100).toFixed(1);
         const usagePct = ((pitchCounts[code] / totalPitches) * 100).toFixed(1);
 
+        // create a new div element for each pitch.
         const box = document.createElement("div");
+
+        // assign CSS class for styling.
         box.className = "pitch-box";
+
+        // template literal which allows dynamic insertion of variables.
         box.innerHTML = `
             <h3>${pitchNames[code] || code}</h3>
             <p>Usage: <strong>${usagePct}%</strong></p>
@@ -303,24 +360,34 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
             <p>Spin Rate: ${avgSpin.toFixed(0)} RPM ${optimalMetrics[code] ? `<br><small>Optimal: ${optimalMetrics[code].spin} RPM</small>` : ""}</p>
             <p>Strike %: ${strikePct}% | Whiff %: ${whiffPct}%</p>
         `;
+
+        // add the box to the page
         container.appendChild(box);
     });
 }
 
 //Coaching Recommendations
+// generates simple coaching feedback based on performance thresholds.
 function generateRecommendations(data, strikeCount, whiffCount) {
     const recList = document.getElementById("recommendationsList");
+
+    // clear previous recommendations before adding new ones.
     recList.innerHTML = "";
+
+    // calculate overall strike percentage and whiff percentage.
     const strikePct = (strikeCount / data.length) * 100;
     const whiffPct = (whiffCount / data.length) * 100;
 
+    // simple conditional logic to generate recommendations based on performance metrics.
     if (strikePct < 60) addRec("Improve command: Focus on fastball glove-side consistency.");
     if (whiffPct < 20) addRec("Increase swing-and-miss: Focus on late-breaking movement on sliders.");
     if (strikePct > 68) addRec("Elite strike rate: Try attacking the edges of the zone more.");
 
+    // Additional generic recommendations for development.
     addRec("Incorporate lower-body power training to increase velocity.");
     addRec("Work on pitch tunneling to improve deception.");
 
+    // helper function to add a recommendation to the list.
     function addRec(text) {
         const li = document.createElement("li");
         li.textContent = text;
@@ -329,19 +396,25 @@ function generateRecommendations(data, strikeCount, whiffCount) {
 }
 
 //Linear Regression Model
+// simple logistic regression model to predict strike probability.
 function trainStrikeModel(data) {
+
+    // filter out rows that don't have necessary data or aren't strikes/balls.
     const cleanData = data.filter(row => row.release_speed && row.release_spin_rate && (row.description.includes("strike") || row.description === "ball"));
     if (cleanData.length < 10) return;
 
+    // prepare feature matrix X and target vector y for logistic regression.
     const X = [], y = [];
     cleanData.forEach(row => {
         X.push([row.release_speed, row.release_spin_rate]);
         y.push(row.description.includes("strike") ? 1 : 0);
     });
 
+    // initialize weights, bias, and learning rate for gradient descent.
     let weights = [0, 0], bias = 0, lr = 0.0000001;
     function sigmoid(z) { return 1 / (1 + Math.exp(-z)); }
 
+    // perform gradient descent to optimize weights and bias.
     for (let iter = 0; iter < 1000; iter++) {
         let dw = [0, 0], db = 0;
         for (let i = 0; i < X.length; i++) {
@@ -350,16 +423,20 @@ function trainStrikeModel(data) {
             const error = pred - y[i];
             dw[0] += error * X[i][0]; dw[1] += error * X[i][1]; db += error;
         }
+        // update weights and bias using the average gradients.
         weights[0] -= lr * dw[0]; weights[1] -= lr * dw[1]; bias -= lr * db;
     }
 
+    // calculate average velocity and spin from the clean dataset to make a prediction.
     const avgVel = cleanData.reduce((a, b) => a + b.release_speed, 0) / cleanData.length;
     const avgSpin = cleanData.reduce((a, b) => a + b.release_spin_rate, 0) / cleanData.length;
     const prob = sigmoid(weights[0] * avgVel + weights[1] * avgSpin + bias);
 
+    // update the ML model tab with the predicted probabilities and generate a bar chart to visualize them.
     document.getElementById("strikeProb").innerText = (prob * 100).toFixed(1) + "%";
     document.getElementById("ballProb").innerText = ((1 - prob) * 100).toFixed(1) + "%";
 
+    // if a previous chart exists, destroy it before creating a new one to avoid overlap.
     if (mlChart) mlChart.destroy();
     mlChart = new Chart(document.getElementById("mlChart"), {
         type: "bar",
@@ -372,12 +449,21 @@ function trainStrikeModel(data) {
 }
 
 //Tab Navigation Logic
+// handles switching between different tabs of the dashboard.
 function openTab(evt, tabName) {
     const contents = document.getElementsByClassName("tab-content");
     const buttons = document.getElementsByClassName("tab-button");
+
+    // hide all tab content.
     for (let i = 0; i < contents.length; i++) contents[i].classList.remove("active");
+
+    // remove active class from all buttons.
     for (let i = 0; i < buttons.length; i++) buttons[i].classList.remove("active");
+
+    // show the selected tab content and mark the clicked button as active.
     document.getElementById(tabName).classList.add("active");
+
+    // add active class to the clicked button for styling.
     evt.currentTarget.classList.add("active");
 }
 
@@ -449,7 +535,6 @@ function generateSprayChart(data) {
         });
     }
 
-</script>
 </script>
 
 </body>
