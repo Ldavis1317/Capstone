@@ -88,14 +88,24 @@
 <div id="recommendations" class="tab-content">
     <h2 class="section-title">Development Recommendations</h2>
 
-    <!--list where recommendations will dynamically be added.-->
+    <div class="card-container">
+        <div class="metric-card">
+            <h3>Best Pitch</h3>
+            <p id="bestPitch">--</p>
+        </div>
+        <div class="metric-card">
+            <h3>Weakest Pitch</h3>
+            <p id="weakestPitch">--</p>
+        </div>
+    </div>
+
     <div class="recommendation-box">
+        <h3>Coaching Recommendations</h3>
         <ul id="recommendationsList">
             <li>Upload data to see personalized coaching insights.</li>
         </ul>
     </div>
 </div>
-
 <!--Machine Learning Model Tab-->
 <div id="mlmodel" class="tab-content">
     <h2 class="section-title">ML Strike vs Ball Probability Model</h2>
@@ -314,6 +324,7 @@ function generateDashboard(data) {
 
     // call additional features to generate comparison tables, recommendations, ML model, and spray chart.
     generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts, data.length);
+    generateStrengthWeakness(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts);
     generateRecommendations(data, strikeCount, whiffCount);
     trainStrikeModel(data);
     generateSprayChart(data);
@@ -354,6 +365,26 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
         const whiffPct = ((pitchWhiff[code] / pitchCounts[code]) * 100).toFixed(1);
         const usagePct = ((pitchCounts[code] / totalPitches) * 100).toFixed(1);
 
+         let score = 0;
+
+        score += (avgVel / 100) * 30;
+        score += (avgSpin / 3000) * 20;
+        score += (parseFloat(strikePct) / 100) * 30;
+        score += (parseFloat(whiffPct) / 100) * 20;
+
+        
+
+        let grade = "D";
+
+        if (score > 60) grade = "A";
+        else if (score > 52) grade = "B";
+        else if (score > 44) grade = "C";
+
+        let gradeColor = "#e74c3c"; // red
+        if (grade === "A") gradeColor = "#2ecc71"; // green
+        else if (grade === "B") gradeColor = "#3498db"; // blue
+        else if (grade === "C") gradeColor = "#f1c40f"; // yellow
+
         // create a new div element for each pitch.
         const box = document.createElement("div");
 
@@ -366,6 +397,7 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
             <p>Usage: <strong>${usagePct}%</strong></p>
             <p>Velocity: ${avgVel.toFixed(1)} MPH ${optimalMetrics[code] ? `<br><small>Optimal: ${optimalMetrics[code].velocity} MPH</small>` : ""}</p>
             <p>Spin Rate: ${avgSpin.toFixed(0)} RPM ${optimalMetrics[code] ? `<br><small>Optimal: ${optimalMetrics[code].spin} RPM</small>` : ""}</p>
+            <p><strong>Grade:</strong> <span style="color:${gradeColor}; font-size:18px;">${grade}</span></p>
             <p>Strike %: ${strikePct}% | Whiff %: ${whiffPct}%</p>
         `;
 
@@ -373,33 +405,123 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
         container.appendChild(box);
     });
 }
+function generateStrengthWeakness(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts) {
+    const pitchScores = {};
 
+    pitchCodes.forEach(code => {
+        const velArr = pitchVelocity[code] || [];
+        const spinArr = pitchSpin[code] || [];
+
+        if (!velArr.length) return;
+
+        const avgVel = velArr.reduce((a, b) => a + b, 0) / velArr.length;
+        const avgSpin = spinArr.length ? spinArr.reduce((a, b) => a + b, 0) / spinArr.length : 0;
+        const strikePct = pitchCounts[code] ? (pitchStrike[code] / pitchCounts[code]) * 100 : 0;
+        const whiffPct = pitchCounts[code] ? (pitchWhiff[code] / pitchCounts[code]) * 100 : 0;
+
+        // Simple weighted score
+        pitchScores[code] =
+            (avgVel * 0.30) +
+            (avgSpin / 100 * 0.20) +
+            (strikePct * 0.30) +
+            (whiffPct * 0.20);
+    });
+
+    const sortedPitches = Object.entries(pitchScores).sort((a, b) => b[1] - a[1]);
+
+    if (!sortedPitches.length) {
+        document.getElementById("bestPitch").innerText = "--";
+        document.getElementById("weakestPitch").innerText = "--";
+        return;
+    }
+
+    const bestPitchCode = sortedPitches[0][0];
+    const weakestPitchCode = sortedPitches[sortedPitches.length - 1][0];
+
+    document.getElementById("bestPitch").innerText = pitchNames[bestPitchCode] || bestPitchCode;
+    document.getElementById("weakestPitch").innerText = pitchNames[weakestPitchCode] || weakestPitchCode;
+}
 //Coaching Recommendations
 // generates simple coaching feedback based on performance thresholds.
 function generateRecommendations(data, strikeCount, whiffCount) {
     const recList = document.getElementById("recommendationsList");
-
-    // clear previous recommendations before adding new ones.
     recList.innerHTML = "";
 
-    // calculate overall strike percentage and whiff percentage.
     const strikePct = (strikeCount / data.length) * 100;
     const whiffPct = (whiffCount / data.length) * 100;
 
-    // simple conditional logic to generate recommendations based on performance metrics.
-    if (strikePct < 60) addRec("Improve command: Focus on fastball glove-side consistency.");
-    if (whiffPct < 20) addRec("Increase swing-and-miss: Focus on late-breaking movement on sliders.");
-    if (strikePct > 68) addRec("Elite strike rate: Try attacking the edges of the zone more.");
+    const pitchStats = {};
 
-    // Additional generic recommendations for development.
-    addRec("Incorporate lower-body power training to increase velocity.");
-    addRec("Work on pitch tunneling to improve deception.");
+    data.forEach(row => {
+        const pitch = row.pitch_type;
+        const vel = row.release_speed || 0;
+        const spin = row.release_spin_rate || 0;
+        const desc = row.description || "";
 
-    // helper function to add a recommendation to the list.
+        if (!pitchStats[pitch]) {
+            pitchStats[pitch] = {
+                count: 0,
+                totalVel: 0,
+                totalSpin: 0,
+                strikes: 0,
+                whiffs: 0
+            };
+        }
+
+        pitchStats[pitch].count++;
+        pitchStats[pitch].totalVel += vel;
+        pitchStats[pitch].totalSpin += spin;
+
+        if (desc.includes("strike") || desc.includes("foul")) {
+            pitchStats[pitch].strikes++;
+        }
+
+        if (desc.includes("swinging_strike")) {
+            pitchStats[pitch].whiffs++;
+        }
+    });
+
     function addRec(text) {
         const li = document.createElement("li");
         li.textContent = text;
         recList.appendChild(li);
+    }
+
+    if (strikePct < 60) {
+        addRec("Improve overall command and strike consistency.");
+    }
+
+    if (whiffPct < 20) {
+        addRec("Increase swing-and-miss potential through sharper movement and better sequencing.");
+    }
+
+    Object.keys(pitchStats).forEach(code => {
+        const p = pitchStats[code];
+        const avgVel = p.totalVel / p.count;
+        const avgSpin = p.totalSpin / p.count;
+        const pitchStrikePct = (p.strikes / p.count) * 100;
+        const pitchWhiffPct = (p.whiffs / p.count) * 100;
+        const pitchLabel = pitchNames[code] || code;
+
+        if (pitchStrikePct < 55) {
+            addRec(`${pitchLabel}: Improve location and command to raise strike percentage.`);
+        }
+
+        if (pitchWhiffPct < 10 && (code === "SL" || code === "CU" || code === "CH")) {
+            addRec(`${pitchLabel}: Improve deception or movement to increase whiff rate.`);
+        }
+
+        if ((code === "FF" || code === "SI") && avgVel < 90) {
+            addRec(`${pitchLabel}: Increase velocity through lower-body strength and mechanical efficiency.`);
+        }
+
+        if (avgSpin > 0 && avgSpin < 2100 && (code === "FF" || code === "SL" || code === "CU")) {
+            addRec(`${pitchLabel}: Improve spin efficiency through grip and release adjustments.`);
+        }
+    });
+
+    if (!recList.children.length) {
+        addRec("Current pitch metrics look solid. Focus on consistency and pitch sequencing.");
     }
 }
 
