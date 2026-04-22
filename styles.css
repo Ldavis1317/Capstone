@@ -225,3 +225,79 @@ body {
         padding: 25px;
     }
 }
+
+/* ============================= */
+/* MOBILE OPTIMIZATION (PHONES) */
+/* ============================= */
+
+@media (max-width: 600px) {
+
+    /* Reduce padding everywhere */
+    .tab-content {
+        padding: 15px;
+    }
+
+    .control-panel {
+        padding: 15px;
+    }
+
+    /* Header smaller */
+    .header {
+        padding: 15px;
+    }
+
+    .header h1 {
+        font-size: 18px;
+    }
+
+    /* Make tabs scroll instead of squish */
+    .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-button {
+        flex: 0 0 auto;
+        min-width: 120px;
+        font-size: 12px;
+        padding: 10px;
+    }
+
+    /* Stack charts cleanly */
+    .charts {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .chart-box {
+        padding: 15px;
+        min-width: 100%;
+    }
+
+    /* Fix chart canvas sizing */
+    canvas {
+        width: 100% !important;
+        height: auto !important;
+    }
+
+    /* Cards full width */
+    .card-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .metric-card {
+        width: 100%;
+        padding: 20px;
+    }
+
+    /* Pitch comparison boxes */
+    .pitch-box {
+        padding: 15px;
+    }
+
+    /* Section titles smaller */
+    .section-title {
+        font-size: 18px;
+    }
+}
