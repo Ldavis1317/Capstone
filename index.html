@@ -30,13 +30,14 @@
     <!--file input that accepts only CSV files, triggers the parsing and analysis when a file is selected.-->
     <input type="file" id="csvFile" accept=".csv">
 </section>
+
 <!--Tabs Section-->
 <div class="tabs">
     <button class="tab-button active" onclick="openTab(event, 'dashboard')">Dashboard</button>
     <button class="tab-button" onclick="openTab(event, 'performance')">Performance</button>
     <button class="tab-button" onclick="openTab(event, 'comparison')">Pitch Comparison</button>
     <button class="tab-button" onclick="openTab(event, 'recommendations')">Recommendations</button>
-    <button class="tab-button" onclick="openTab(event, 'mlmodel')">ML Strike Model</button>
+    <button class="tab-button" onclick="openTab(event, 'mlmodel')">ML Model</button>
 </div>
 
 <!--Dashboard Tab-->
@@ -55,12 +56,14 @@
 
     <div class="chart-box full-width" style="margin-top: 20px;">
         <h2>Spray Chart on Batted Balls</h2>
-        <div style="max-width: 500px; margin: 0 auto;"></div>
+        <div style="max-width: 500px; margin: 0 auto;">
             <canvas id="sprayChart"></canvas>
         </div>
-    <div class="chart-box full-width" style="margin-top: 20px;;">
+    </div>
+
+    <div class="chart-box full-width" style="margin-top: 20px;">
         <h2>Pitch Location Heatmap</h2>
-        <div style ="max-width: 380px; margin: 0 auto;">
+        <div style="max-width: 380px; margin: 0 auto;">
             <canvas id="locationChart"></canvas>
         </div>
     </div>
@@ -84,10 +87,11 @@
     <div id="pitchContainer"></div>
 </div>
 
-<!--Recomendations Tab-->
+<!--Recommendations Tab-->
 <div id="recommendations" class="tab-content">
     <h2 class="section-title">Development Recommendations</h2>
 
+    <!--metric cards that summarize the best and weakest pitch types.-->
     <div class="card-container">
         <div class="metric-card">
             <h3>Best Pitch</h3>
@@ -99,6 +103,7 @@
         </div>
     </div>
 
+    <!--list where recommendations will dynamically be added.-->
     <div class="recommendation-box">
         <h3>Coaching Recommendations</h3>
         <ul id="recommendationsList">
@@ -106,25 +111,58 @@
         </ul>
     </div>
 </div>
+
 <!--Machine Learning Model Tab-->
 <div id="mlmodel" class="tab-content">
-    <h2 class="section-title">ML Strike vs Ball Probability Model</h2>
+    <h2 class="section-title">ML Pitch Location Model</h2>
 
-    <!--displays model predictions.-->
+    <!--displays machine learning error metrics and total predicted pitches.-->
     <div class="card-container">
         <div class="metric-card">
-            <h3>Predicted Strike Probability</h3>
-            <p id="strikeProb">--</p>
+            <h3>Total Predicted Pitches</h3>
+            <p id="sampleCount">--</p>
         </div>
         <div class="metric-card">
-            <h3>Predicted Ball Probability</h3>
-            <p id="ballProb">--</p>
+            <h3>Avg X Error</h3>
+            <p id="avgXError">--</p>
+        </div>
+        <div class="metric-card">
+            <h3>Avg Z Error</h3>
+            <p id="avgZError">--</p>
+        </div>
+        <div class="metric-card">
+            <h3>Avg Distance Error</h3>
+            <p id="avgDistanceError">--</p>
         </div>
     </div>
 
-    <!--chart showing strike vs. ball probabilities.-->
+    <!--settings area that lets the user control how many ML pitch samples are displayed.-->
+    <div class="chart-box" style="margin-top:20px;">
+        <h2>ML Display Settings</h2>
+        <label for="sampleSizeSelect"><strong>Number of pitches to show:</strong></label>
+        <select id="sampleSizeSelect">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="75">75</option>
+            <option value="100">100</option>
+        </select>
+    </div>
+
+    <!--chart showing actual vs predicted pitch locations and the line between matching points.-->
     <div class="chart-box" style="margin-top:30px;">
-        <canvas id="mlChart"></canvas>
+        <h2>Actual vs Predicted Pitch Locations</h2>
+        <div style="max-width: 420px; margin: 0 auto;">
+            <canvas id="mlChart"></canvas>
+        </div>
+    </div>
+
+    <!--single pitch example showing one actual/predicted pair and the distance error.-->
+    <div class="chart-box" style="margin-top:20px;">
+        <h2>Single Pitch Example</h2>
+        <div id="singlePitchExample">
+            <p>Upload a CSV with plate_x, plate_z, pred_x, and pred_z columns to view results.</p>
+        </div>
     </div>
 </div>
 
@@ -136,6 +174,7 @@ let velocityChart;
 let mlChart;
 let sprayChart;
 let locationChart;
+let latestMLData = null;
 
 //mapping pitch codes to readable names and colors for charts.
 const pitchNames = {
@@ -153,28 +192,33 @@ const pitchNames = {
 
 //color mapping for pitch types used in charts.
 const pitchColors = {
-    "FF": "#d22d2d", // Red
-    "SI": "#fe9d31", // Orange
-    "FC": "#933f2c", // Brown
-    "CH": "#1db346", // Green
-    "ST": "#1a47bb", // Blue
-    "SL": "#ee00e1", // Pink
-    "CU": "#00d1ed"  // Sky Blue
+    "FF": "#d22d2d",
+    "SI": "#fe9d31",
+    "FC": "#933f2c",
+    "CH": "#1db346",
+    "ST": "#1a47bb",
+    "SL": "#ee00e1",
+    "CU": "#00d1ed",
+    "FS": "#8e44ad",
+    "KC": "#16a085",
+    "EP": "#7f8c8d"
 };
 
 //colors for different hit outcomes in spray chart.
-const hitColors ={
-    "single": "#2ecc71", // Green
-    "double": "#3498db", // Blue
-    "triple": "#f1c40f", // Yellow
-    "home_run": "#9b59b6", // Purple
-    "field_out": "#95a5a6", // Gray  
-    "error": "#e74c3c"  // Red
-}
-//CSV Import Funciton
+const hitColors = {
+    "single": "#2ecc71",
+    "double": "#3498db",
+    "triple": "#f1c40f",
+    "home_run": "#9b59b6",
+    "field_out": "#95a5a6",
+    "error": "#e74c3c",
+    "other": "#bdc3c7"
+};
+
+//CSV Import Function
 // triggered when user selects a CSV file.
 document.getElementById("csvFile").addEventListener("change", function(event) {
-
+    
     // get the uploaded file.
     const file = event.target.files[0];
 
@@ -183,17 +227,26 @@ document.getElementById("csvFile").addEventListener("change", function(event) {
 
     // use PapaParse to read and parse the CSV file.
     Papa.parse(file, {
-        header: true,       // treat first row as column headers.
-        dynamicTyping: true,    // convert numbers automatically.
+        header: true,
+        dynamicTyping: true,
         complete: function(results) {
 
-            // Filter out rows without a pitch type (e.g., empty rows at end of CSV)
-            const data = results.data.filter(row => row.pitch_type);
+            // filter out empty rows and rows without a pitch type.
+            const data = results.data.filter(row => row && row.pitch_type);
 
             // generate full dashboard with the parsed data.
             generateDashboard(data);
         }
     });
+});
+
+//sample size control for the machine learning chart.
+document.getElementById("sampleSizeSelect").addEventListener("change", function() {
+
+    // redraw the machine learning chart using the most recently loaded data.
+    if (latestMLData) {
+        generateMLModel(latestMLData);
+    }
 });
 
 // processes the raw CSV data and generates all charts, metrics, and recommendations for the dashboard.
@@ -207,16 +260,19 @@ function generateDashboard(data) {
     const pitchWhiff = {};
 
     // totals for overall metrics.
-    let totalVelocity = 0, velocityCount = 0;
-    let totalSpin = 0, spinCount = 0;
-    let strikeCount = 0, whiffCount = 0;
+    let totalVelocity = 0;
+    let velocityCount = 0;
+    let totalSpin = 0;
+    let spinCount = 0;
+    let strikeCount = 0;
+    let whiffCount = 0;
 
     // loop through every pitch in dataset.
     data.forEach(row => {
         const pitch = row.pitch_type;
         const vel = row.release_speed;
         const spin = row.release_spin_rate;
-        const desc = row.description || "";
+        const desc = (row.description || "").toString().toLowerCase();
 
         // initialize values for each pitch type.
         if (!pitchCounts[pitch]) {
@@ -230,26 +286,27 @@ function generateDashboard(data) {
         // count pitch usage.
         pitchCounts[pitch]++;
 
-        //Velocity Logic
-        if (vel) {
-            pitchVelocity[pitch].push(vel);
-            totalVelocity += vel;
+        // velocity logic.
+        if (vel !== null && vel !== undefined && !isNaN(vel)) {
+            pitchVelocity[pitch].push(Number(vel));
+            totalVelocity += Number(vel);
             velocityCount++;
         }
-        //Spin Logic
-        if (spin) {
-            pitchSpin[pitch].push(spin);
-            totalSpin += spin;
+
+        // spin logic.
+        if (spin !== null && spin !== undefined && !isNaN(spin)) {
+            pitchSpin[pitch].push(Number(spin));
+            totalSpin += Number(spin);
             spinCount++;
         }
 
-        // Logic for Strikes (Includes Called, Swinging, Fouls)
+        // logic for strikes (includes called strikes, swinging strikes, and fouls).
         if (desc.includes("strike") || desc.includes("foul")) {
             strikeCount++;
             pitchStrike[pitch]++;
         }
 
-        // Logic for Whiffs (Swining Strike/Pitches hitters missed in the zone)
+        // logic for whiffs (swinging strikes where the hitter misses).
         if (desc.includes("swinging_strike")) {
             whiffCount++;
             pitchWhiff[pitch]++;
@@ -261,7 +318,7 @@ function generateDashboard(data) {
     const displayNames = pitchCodes.map(code => pitchNames[code] || code);
     const chartColors = pitchCodes.map(code => pitchColors[code] || "#bdc3c7");
 
-    // Pie Chart Generation For Usage
+    // pie chart generation for pitch usage.
     if (usageChart) usageChart.destroy();
     usageChart = new Chart(document.getElementById("usageChart"), {
         type: "pie",
@@ -276,15 +333,15 @@ function generateDashboard(data) {
         options: {
             responsive: true,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { position: "bottom" }
             }
         }
     });
 
-    // Velocity Bar Chart Generation
+    // velocity bar chart generation.
     const avgVelocities = pitchCodes.map(code => {
         const arr = pitchVelocity[code];
-        return arr.reduce((a, b) => a + b, 0) / arr.length;
+        return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
     });
 
     if (velocityChart) velocityChart.destroy();
@@ -310,23 +367,23 @@ function generateDashboard(data) {
         }
     });
 
-    // PERFORMANCE TAB METRICS
+    // performance tab metrics.
     document.getElementById("performance").innerHTML = `
         <h2 class="section-title">Performance Metrics</h2>
         <div class="card-container">
             <div class="metric-card"><h3>Total Pitches</h3><p>${data.length}</p></div>
-            <div class="metric-card"><h3>Avg Velocity</h3><p>${(totalVelocity / velocityCount).toFixed(1)} MPH</p></div>
-            <div class="metric-card"><h3>Avg Spin Rate</h3><p>${(totalSpin / spinCount).toFixed(0)} RPM</p></div>
-            <div class="metric-card"><h3>Strike %</h3><p>${((strikeCount / data.length) * 100).toFixed(1)}%</p></div>
-            <div class="metric-card"><h3>Whiff %</h3><p>${((whiffCount / data.length) * 100).toFixed(1)}%</p></div>
+            <div class="metric-card"><h3>Avg Velocity</h3><p>${velocityCount ? (totalVelocity / velocityCount).toFixed(1) + " MPH" : "--"}</p></div>
+            <div class="metric-card"><h3>Avg Spin Rate</h3><p>${spinCount ? (totalSpin / spinCount).toFixed(0) + " RPM" : "--"}</p></div>
+            <div class="metric-card"><h3>Strike %</h3><p>${data.length ? ((strikeCount / data.length) * 100).toFixed(1) + "%" : "--"}</p></div>
+            <div class="metric-card"><h3>Whiff %</h3><p>${data.length ? ((whiffCount / data.length) * 100).toFixed(1) + "%" : "--"}</p></div>
         </div>
     `;
 
-    // call additional features to generate comparison tables, recommendations, ML model, and spray chart.
+    // call additional features to generate comparison tables, strengths/weaknesses, recommendations, machine learning view, spray chart, and location chart.
     generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts, data.length);
     generateStrengthWeakness(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts);
     generateRecommendations(data, strikeCount, whiffCount);
-    trainStrikeModel(data);
+    generateMLModel(data);
     generateSprayChart(data);
     generateLocationChart(data);
 }
@@ -335,7 +392,7 @@ function generateDashboard(data) {
 // generates a comparison of the user's pitch metrics against optimal benchmarks for each pitch type.
 function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts, totalPitches) {
 
-    // predefined ideal benchmarks for certain pitch typed.
+    // predefined ideal benchmarks for certain pitch types.
     // used to compare actual performance vs optimal values.
     const optimalMetrics = {
         "FF": { velocity: 94, spin: 2300 },
@@ -353,37 +410,34 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
 
     // loop through each pitch type.
     pitchCodes.forEach(code => {
-
-        // arrays of velocity and spin for the current pitch type.
-        const velArr = pitchVelocity[code];
-        const spinArr = pitchSpin[code];
+        const velArr = pitchVelocity[code] || [];
+        const spinArr = pitchSpin[code] || [];
 
         // calculate average velocity, spin, strike percentage, whiff percentage, and usage percentage for the current pitch type.
-        const avgVel = velArr.reduce((a, b) => a + b, 0) / velArr.length;
+        const avgVel = velArr.length ? velArr.reduce((a, b) => a + b, 0) / velArr.length : 0;
         const avgSpin = spinArr.length ? spinArr.reduce((a, b) => a + b, 0) / spinArr.length : 0;
-        const strikePct = ((pitchStrike[code] / pitchCounts[code]) * 100).toFixed(1);
-        const whiffPct = ((pitchWhiff[code] / pitchCounts[code]) * 100).toFixed(1);
-        const usagePct = ((pitchCounts[code] / totalPitches) * 100).toFixed(1);
+        const strikePct = pitchCounts[code] ? ((pitchStrike[code] / pitchCounts[code]) * 100).toFixed(1) : "0.0";
+        const whiffPct = pitchCounts[code] ? ((pitchWhiff[code] / pitchCounts[code]) * 100).toFixed(1) : "0.0";
+        const usagePct = totalPitches ? ((pitchCounts[code] / totalPitches) * 100).toFixed(1) : "0.0";
 
-         let score = 0;
-
+        // weighted grading formula that scores each pitch using velocity, spin, strike rate, and whiff rate.
+        let score = 0;
         score += (avgVel / 100) * 30;
         score += (avgSpin / 3000) * 20;
         score += (parseFloat(strikePct) / 100) * 30;
         score += (parseFloat(whiffPct) / 100) * 20;
 
-        
-
+        // convert the score into a letter grade.
         let grade = "D";
-
         if (score > 60) grade = "A";
         else if (score > 52) grade = "B";
         else if (score > 44) grade = "C";
 
-        let gradeColor = "#e74c3c"; // red
-        if (grade === "A") gradeColor = "#2ecc71"; // green
-        else if (grade === "B") gradeColor = "#3498db"; // blue
-        else if (grade === "C") gradeColor = "#f1c40f"; // yellow
+        // assign a display color based on the letter grade.
+        let gradeColor = "#e74c3c";
+        if (grade === "A") gradeColor = "#2ecc71";
+        else if (grade === "B") gradeColor = "#3498db";
+        else if (grade === "C") gradeColor = "#f1c40f";
 
         // create a new div element for each pitch.
         const box = document.createElement("div");
@@ -401,17 +455,20 @@ function generateComparison(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, p
             <p>Strike %: ${strikePct}% | Whiff %: ${whiffPct}%</p>
         `;
 
-        // add the box to the page
+        // add the box to the page.
         container.appendChild(box);
     });
 }
+
+//Strength and Weakness Summary
+// identifies the best and weakest pitch type using a weighted pitch score.
 function generateStrengthWeakness(pitchCodes, pitchVelocity, pitchSpin, pitchStrike, pitchWhiff, pitchCounts) {
     const pitchScores = {};
 
+    // calculate a weighted score for each pitch type.
     pitchCodes.forEach(code => {
         const velArr = pitchVelocity[code] || [];
         const spinArr = pitchSpin[code] || [];
-
         if (!velArr.length) return;
 
         const avgVel = velArr.reduce((a, b) => a + b, 0) / velArr.length;
@@ -419,7 +476,6 @@ function generateStrengthWeakness(pitchCodes, pitchVelocity, pitchSpin, pitchStr
         const strikePct = pitchCounts[code] ? (pitchStrike[code] / pitchCounts[code]) * 100 : 0;
         const whiffPct = pitchCounts[code] ? (pitchWhiff[code] / pitchCounts[code]) * 100 : 0;
 
-        // Simple weighted score
         pitchScores[code] =
             (avgVel * 0.30) +
             (avgSpin / 100 * 0.20) +
@@ -427,36 +483,41 @@ function generateStrengthWeakness(pitchCodes, pitchVelocity, pitchSpin, pitchStr
             (whiffPct * 0.20);
     });
 
+    // sort pitches from strongest to weakest.
     const sortedPitches = Object.entries(pitchScores).sort((a, b) => b[1] - a[1]);
 
+    // if no pitches were scored, display placeholders.
     if (!sortedPitches.length) {
         document.getElementById("bestPitch").innerText = "--";
         document.getElementById("weakestPitch").innerText = "--";
         return;
     }
 
+    // update the recommendations tab with the best and weakest pitch names.
     const bestPitchCode = sortedPitches[0][0];
     const weakestPitchCode = sortedPitches[sortedPitches.length - 1][0];
 
     document.getElementById("bestPitch").innerText = pitchNames[bestPitchCode] || bestPitchCode;
     document.getElementById("weakestPitch").innerText = pitchNames[weakestPitchCode] || weakestPitchCode;
 }
+
 //Coaching Recommendations
-// generates simple coaching feedback based on performance thresholds.
+// generates personalized coaching feedback based on performance thresholds and per-pitch trends.
 function generateRecommendations(data, strikeCount, whiffCount) {
     const recList = document.getElementById("recommendationsList");
     recList.innerHTML = "";
 
-    const strikePct = (strikeCount / data.length) * 100;
-    const whiffPct = (whiffCount / data.length) * 100;
-
+    // calculate overall strike and whiff percentages.
+    const strikePct = data.length ? (strikeCount / data.length) * 100 : 0;
+    const whiffPct = data.length ? (whiffCount / data.length) * 100 : 0;
     const pitchStats = {};
 
+    // aggregate statistics for each pitch type.
     data.forEach(row => {
         const pitch = row.pitch_type;
         const vel = row.release_speed || 0;
         const spin = row.release_spin_rate || 0;
-        const desc = row.description || "";
+        const desc = (row.description || "").toString().toLowerCase();
 
         if (!pitchStats[pitch]) {
             pitchStats[pitch] = {
@@ -481,20 +542,18 @@ function generateRecommendations(data, strikeCount, whiffCount) {
         }
     });
 
+    // helper function to add a recommendation to the list.
     function addRec(text) {
         const li = document.createElement("li");
         li.textContent = text;
         recList.appendChild(li);
     }
 
-    if (strikePct < 60) {
-        addRec("Improve overall command and strike consistency.");
-    }
+    // add overall recommendations based on broad performance thresholds.
+    if (strikePct < 60) addRec("Improve overall command and strike consistency.");
+    if (whiffPct < 20) addRec("Increase swing-and-miss potential through sharper movement and better sequencing.");
 
-    if (whiffPct < 20) {
-        addRec("Increase swing-and-miss potential through sharper movement and better sequencing.");
-    }
-
+    // add pitch-specific recommendations based on each pitch profile.
     Object.keys(pitchStats).forEach(code => {
         const p = pitchStats[code];
         const avgVel = p.totalVel / p.count;
@@ -520,61 +579,173 @@ function generateRecommendations(data, strikeCount, whiffCount) {
         }
     });
 
+    // fallback recommendation if no issues were triggered.
     if (!recList.children.length) {
         addRec("Current pitch metrics look solid. Focus on consistency and pitch sequencing.");
     }
 }
 
-//Linear Regression Model
-// simple logistic regression model to predict strike probability.
-function trainStrikeModel(data) {
+//Machine Learning Model Visualization
+// uses actual and predicted pitch location columns to calculate errors and plot pitch locations.
+function generateMLModel(data) {
 
-    // filter out rows that don't have necessary data or aren't strikes/balls.
-    const cleanData = data.filter(row => row.release_speed && row.release_spin_rate && (row.description.includes("strike") || row.description === "ball"));
-    if (cleanData.length < 10) return;
+    // store the latest ML data so the sample size selector can redraw the chart.
+    latestMLData = data;
 
-    // prepare feature matrix X and target vector y for logistic regression.
-    const X = [], y = [];
-    cleanData.forEach(row => {
-        X.push([row.release_speed, row.release_spin_rate]);
-        y.push(row.description.includes("strike") ? 1 : 0);
-    });
+    // filter rows to only those that contain valid actual and predicted location values.
+    const points = data.filter(row =>
+        row.plate_x !== null && row.plate_x !== undefined && !isNaN(row.plate_x) &&
+        row.plate_z !== null && row.plate_z !== undefined && !isNaN(row.plate_z) &&
+        row.pred_x !== null && row.pred_x !== undefined && !isNaN(row.pred_x) &&
+        row.pred_z !== null && row.pred_z !== undefined && !isNaN(row.pred_z)
+    );
 
-    // initialize weights, bias, and learning rate for gradient descent.
-    let weights = [0, 0], bias = 0, lr = 0.0000001;
-    function sigmoid(z) { return 1 / (1 + Math.exp(-z)); }
-
-    // perform gradient descent to optimize weights and bias.
-    for (let iter = 0; iter < 1000; iter++) {
-        let dw = [0, 0], db = 0;
-        for (let i = 0; i < X.length; i++) {
-            const z = weights[0] * X[i][0] + weights[1] * X[i][1] + bias;
-            const pred = sigmoid(z);
-            const error = pred - y[i];
-            dw[0] += error * X[i][0]; dw[1] += error * X[i][1]; db += error;
-        }
-        // update weights and bias using the average gradients.
-        weights[0] -= lr * dw[0]; weights[1] -= lr * dw[1]; bias -= lr * db;
+    // if no valid machine learning columns exist, show a message and stop.
+    if (!points.length) {
+        document.getElementById("sampleCount").innerText = "--";
+        document.getElementById("avgXError").innerText = "--";
+        document.getElementById("avgZError").innerText = "--";
+        document.getElementById("avgDistanceError").innerText = "--";
+        document.getElementById("singlePitchExample").innerHTML =
+            "<p>No valid ML prediction columns were found. Make sure your CSV includes plate_x, plate_z, pred_x, and pred_z.</p>";
+        if (mlChart) mlChart.destroy();
+        return;
     }
 
-    // calculate average velocity and spin from the clean dataset to make a prediction.
-    const avgVel = cleanData.reduce((a, b) => a + b.release_speed, 0) / cleanData.length;
-    const avgSpin = cleanData.reduce((a, b) => a + b.release_spin_rate, 0) / cleanData.length;
-    const prob = sigmoid(weights[0] * avgVel + weights[1] * avgSpin + bias);
+    // calculate average x error, z error, and overall distance error across all valid pitches.
+    const avgXError = points.reduce((sum, p) => sum + Math.abs(Number(p.pred_x) - Number(p.plate_x)), 0) / points.length;
+    const avgZError = points.reduce((sum, p) => sum + Math.abs(Number(p.pred_z) - Number(p.plate_z)), 0) / points.length;
+    const avgDistanceError = points.reduce((sum, p) => {
+        const dx = Number(p.pred_x) - Number(p.plate_x);
+        const dz = Number(p.pred_z) - Number(p.plate_z);
+        return sum + Math.sqrt((dx * dx) + (dz * dz));
+    }, 0) / points.length;
 
-    // update the ML model tab with the predicted probabilities and generate a bar chart to visualize them.
-    document.getElementById("strikeProb").innerText = (prob * 100).toFixed(1) + "%";
-    document.getElementById("ballProb").innerText = ((1 - prob) * 100).toFixed(1) + "%";
+    // update the machine learning metric cards.
+    document.getElementById("sampleCount").innerText = points.length;
+    document.getElementById("avgXError").innerText = avgXError.toFixed(3) + " ft";
+    document.getElementById("avgZError").innerText = avgZError.toFixed(3) + " ft";
+    document.getElementById("avgDistanceError").innerText = avgDistanceError.toFixed(3) + " ft";
 
-    // if a previous chart exists, destroy it before creating a new one to avoid overlap.
+    // build a single-pitch example using the first valid pitch in the dataset.
+    const example = points[0];
+    const exampleDistance = Math.sqrt(
+        Math.pow(Number(example.pred_x) - Number(example.plate_x), 2) +
+        Math.pow(Number(example.pred_z) - Number(example.plate_z), 2)
+    );
+
+    document.getElementById("singlePitchExample").innerHTML = `
+        <p><strong>Predicted:</strong> (${Number(example.pred_x).toFixed(3)}, ${Number(example.pred_z).toFixed(3)})</p>
+        <p><strong>Actual:</strong> (${Number(example.plate_x).toFixed(3)}, ${Number(example.plate_z).toFixed(3)})</p>
+        <p><strong>Error Distance:</strong> ${exampleDistance.toFixed(3)} ft</p>
+    `;
+
+    // use the selected sample size to randomly display only part of the full dataset on the chart.
+    const sampleSize = parseInt(document.getElementById("sampleSizeSelect").value, 10) || 50;
+    const shuffled = [...points].sort(() => Math.random() - 0.5);
+    const samplePoints = shuffled.slice(0, sampleSize);
+
+    // separate sampled points into actual and predicted coordinates.
+    const actualPoints = samplePoints.map(p => ({ x: Number(p.plate_x), y: Number(p.plate_z) }));
+    const predictedPoints = samplePoints.map(p => ({ x: Number(p.pred_x), y: Number(p.pred_z) }));
+
+    // create a line dataset for each actual/predicted pair so they can be visually connected.
+    const lineDatasets = samplePoints.map(p => ({
+        label: "Connection",
+        data: [
+            { x: Number(p.plate_x), y: Number(p.plate_z) },
+            { x: Number(p.pred_x), y: Number(p.pred_z) }
+        ],
+        type: "line",
+        showLine: true,
+        fill: false,
+        borderColor: "rgba(120,120,120,0.45)",
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 0
+    }));
+
+    // custom plugin to draw the strike zone behind the machine learning points.
+    const strikeZonePlugin = {
+        id: "mlStrikeZonePlugin",
+        beforeDraw: (chart) => {
+            const { ctx, scales: { x, y } } = chart;
+
+            const xLeft = x.getPixelForValue(-0.85);
+            const xRight = x.getPixelForValue(0.85);
+            const yTop = y.getPixelForValue(3.5);
+            const yBot = y.getPixelForValue(1.5);
+
+            ctx.save();
+            ctx.strokeStyle = "rgba(0,0,0,0.8)";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(xLeft, yTop, xRight - xLeft, yBot - yTop);
+
+            ctx.setLineDash([5, 5]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x.getPixelForValue(-0.28), yTop);
+            ctx.lineTo(x.getPixelForValue(-0.28), yBot);
+            ctx.moveTo(x.getPixelForValue(0.28), yTop);
+            ctx.lineTo(x.getPixelForValue(0.28), yBot);
+            ctx.moveTo(xLeft, y.getPixelForValue(2.83));
+            ctx.lineTo(xRight, y.getPixelForValue(2.83));
+            ctx.moveTo(xLeft, y.getPixelForValue(2.16));
+            ctx.lineTo(xRight, y.getPixelForValue(2.16));
+            ctx.stroke();
+            ctx.restore();
+        }
+    };
+
+    // destroy the previous machine learning chart before drawing a new one.
     if (mlChart) mlChart.destroy();
     mlChart = new Chart(document.getElementById("mlChart"), {
-        type: "bar",
+        type: "scatter",
         data: {
-            labels: ["Strike", "Ball"],
-            datasets: [{ label: "Probability %", data: [prob * 100, (1 - prob) * 100], backgroundColor: ['#2980b9', '#bdc3c7'] }]
+            datasets: [
+                ...lineDatasets,
+                {
+                    label: "Actual Location",
+                    data: actualPoints,
+                    backgroundColor: "#2980b9",
+                    pointRadius: 4
+                },
+                {
+                    label: "Predicted Location",
+                    data: predictedPoints,
+                    backgroundColor: "#e74c3c",
+                    pointRadius: 4
+                }
+            ]
         },
-        options: { scales: { y: { beginAtZero: true, max: 100 } } }
+        plugins: [strikeZonePlugin],
+        options: {
+            aspectRatio: 0.8,
+            scales: {
+                x: {
+                    min: -2.2,
+                    max: 2.2,
+                    title: { display: true, text: "Horizontal (ft)" },
+                    grid: { display: false }
+                },
+                y: {
+                    min: 0,
+                    max: 5,
+                    title: { display: true, text: "Height (ft)" },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        filter: function(item) {
+                            return item.text === "Actual Location" || item.text === "Predicted Location";
+                        }
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -592,176 +763,200 @@ function openTab(evt, tabName) {
 
     // show the selected tab content and mark the clicked button as active.
     document.getElementById(tabName).classList.add("active");
-
-    // add active class to the clicked button for styling.
     evt.currentTarget.classList.add("active");
 }
 
 //Batted Ball Spray Chart Logic (Where hits went on the field)
 function generateSprayChart(data) {
-        // Determine if there was a hit or not.
-        const hitData = data.filter(row => row.hc_x !== null && row.hc_y !== null);
 
-        // Sort the hits into their outcomes
-        const datasets = {};
-        hitData.forEach(row => {
-            const event = row.events || "other";
-            if (!datasets[event]) {
-                datasets[event] = {
-                    label: event.replace('_', ' ').toUpperCase(),
-                    data: [],
-                    backgroundColor: hitColors[event] || "#bdc3c7",
-                    pointRadius: 5
-                };
+    // determine if there was a hit location recorded or not.
+    const hitData = data.filter(row =>
+        row.hc_x !== null && row.hc_x !== undefined && !isNaN(row.hc_x) &&
+        row.hc_y !== null && row.hc_y !== undefined && !isNaN(row.hc_y)
+    );
+
+    // sort the hits into datasets by outcome.
+    const datasets = {};
+    hitData.forEach(row => {
+        const event = row.events || "other";
+        if (!datasets[event]) {
+            datasets[event] = {
+                label: event.replace(/_/g, " ").toUpperCase(),
+                data: [],
+                backgroundColor: hitColors[event] || "#bdc3c7",
+                pointRadius: 5
+            };
+        }
+        datasets[event].data.push({ x: Number(row.hc_x), y: Number(row.hc_y) });
+    });
+
+    // destroy the old spray chart before drawing a new one.
+    if (sprayChart) sprayChart.destroy();
+
+    // create the spray chart and draw a simple field outline behind the points.
+    const ctx = document.getElementById("sprayChart").getContext("2d");
+    sprayChart = new Chart(ctx, {
+        type: "scatter",
+        data: { datasets: Object.values(datasets) },
+        options: {
+            maintainAspectRatio: true,
+            scales: {
+                x: { min: 0, max: 250, display: false },
+                y: { min: 0, max: 250, display: false, reverse: true }
+            },
+            plugins: {
+                legend: { position: "bottom" }
             }
-            datasets[event].data.push({ x: row.hc_x, y: row.hc_y });
-        });
+        },
+        plugins: [{
+            id: "sprayFieldPlugin",
+            beforeDraw: (chart) => {
+                const { ctx, chartArea: { top, left, width, height } } = chart;
+                ctx.save();
+                ctx.strokeStyle = "#555";
+                ctx.lineWidth = 2;
 
-        if (sprayChart) sprayChart.destroy();
+                const getX = (v) => left + (v / 250) * width;
+                const getY = (v) => top + (v / 250) * height;
 
-        const ctx = document.getElementById('sprayChart').getContext('2d');
-        sprayChart = new Chart(ctx, {
-            type: 'scatter',
-            data: { datasets: Object.values(datasets) },
-            options: {
-                //This does not work yet, I have to impliment a field backdrop right now it just plots where each hit went on a white backround.
-                maintainAspectRatio: true,
-                scales: {
-                    x: { min: 0, max: 250, display: false },
-                    y: { min: 0, max: 250, display: false, reverse: true } // Keeps home plate at the bottom
-                },
-                plugins: {
-                    legend: { position: 'bottom' },
-                    beforeDraw: (chart) => {
-                        const {ctx, chartArea: {top, bottom, left, right, width, height}} = chart;
-                        ctx.save();
-                        ctx.strokeStyle = '#555';
-                        ctx.lineWidth = 2;
-                        const getX = (v) => left + (v / 250) * width;
-                        const getY = (v) => top + (v / 250) * height;
-                        const homeX = getX(125);
-                        const homeY = getY(200);
+                const homeX = getX(125);
+                const homeY = getY(200);
 
-                        // Foul Lines
-                        ctx.beginPath();
-                        ctx.moveTo(homeX, homeY);
-                        ctx.lineTo(getX(20), getY(60));
-                        ctx.moveTo(homeX, homeY);
-                        ctx.lineTo(getX(230), getY(60));
-                        ctx.stroke();
+                // foul lines.
+                ctx.beginPath();
+                ctx.moveTo(homeX, homeY);
+                ctx.lineTo(getX(20), getY(60));
+                ctx.moveTo(homeX, homeY);
+                ctx.lineTo(getX(230), getY(60));
+                ctx.stroke();
 
-                        // Infield
-                        ctx.beginPath();
-                        ctx.moveTo(homeX, homeY);
-                        ctx.lineTo(getX(160), getY(165));
-                        ctx.lineTo(getX(125), getY(130));
-                        ctx.lineTo(getX(90), getY(165));
-                        ctx.closePath();
-                        ctx.stroke();
-                        ctx.restore();
-                    }
-                }
+                // infield outline.
+                ctx.beginPath();
+                ctx.moveTo(homeX, homeY);
+                ctx.lineTo(getX(160), getY(165));
+                ctx.lineTo(getX(125), getY(130));
+                ctx.lineTo(getX(90), getY(165));
+                ctx.closePath();
+                ctx.stroke();
+
+                ctx.restore();
             }
-        });
-    }
-//This function generates a strike zone image, and then plots the pitches and where they were in and around the zone for each pitch type.
-function generateLocationChart(data){
-    //Filter the data to remove empty rows and errors where location coordinates are not recorded.
-    const locData = data.filter(row=>row.plate_x !== null && row.plate_z !==null);
+        }]
+    });
+}
 
-    //This is an empty object where we will be storing the datasets which will be grouped by pitch type.
+//Strike Zone Location Chart Logic
+// generates a strike zone image and plots actual pitch locations by pitch type.
+function generateLocationChart(data) {
+
+    // filter the data to remove rows where location coordinates are missing.
+    const locData = data.filter(row =>
+        row.plate_x !== null && row.plate_x !== undefined && !isNaN(row.plate_x) &&
+        row.plate_z !== null && row.plate_z !== undefined && !isNaN(row.plate_z)
+    );
+
+    // create an object to group points by pitch type.
     const datasets = {};
 
-    //Loop through each filtered pitch.
+    // loop through each filtered pitch.
     locData.forEach(row => {
-        //This gets the pitch type
         const type = row.pitch_type || "Other";
 
-        //This section creates the chart settings for each pitch when it is seen for the first time.
+        // create the chart settings for each pitch type when seen for the first time.
         if (!datasets[type]) {
             datasets[type] = {
                 label: pitchNames[type] || type,
                 data: [],
                 backgroundColor: pitchColors[type] || "#bdc3c7",
                 pointRadius: 5,
-                borderColor: 'white',
+                borderColor: "white",
                 borderWidth: 1
             };
         }
-        //This pairs the location coordinates to the pitch types.
-        datasets[type].data.push({ x: row.plate_x, y: row.plate_z });
+
+        // pair the location coordinates with the proper pitch type dataset.
+        datasets[type].data.push({ x: Number(row.plate_x), y: Number(row.plate_z) });
     });
-    //Destroy the chart if it doesnt exist
+
+    // destroy the old location chart if it already exists.
     if (locationChart) locationChart.destroy();
 
-    //This Gets the 2d drwaing context for the strike zone
-    const ctx = document.getElementById('locationChart').getContext('2d');
+    // get the 2d drawing context for the strike zone.
+    const ctx = document.getElementById("locationChart").getContext("2d");
 
-    //This defines the shape and layout of the actual strikezone behind the dots
+    // define the shape and layout of the actual strike zone behind the points.
     const strikeZonePlugin = {
-        id: 'strikeZonePlugin',
+        id: "strikeZonePlugin",
         beforeDraw: (chart) => {
-            //This simply makes the chart breakable into drawing tools
             const { ctx, scales: { x, y }, chartArea: { top, left, width, height } } = chart;
-            
-            //This is the red/blue heatmap
+
+            // create the red/blue heatmap background.
             const grad = ctx.createRadialGradient(
-                x.getPixelForValue(0), y.getPixelForValue(2.5), 15, 
-                x.getPixelForValue(0), y.getPixelForValue(2.5), 150 
+                x.getPixelForValue(0), y.getPixelForValue(2.5), 15,
+                x.getPixelForValue(0), y.getPixelForValue(2.5), 150
             );
-            grad.addColorStop(0, 'rgba(231, 76, 60, 0.3)'); 
-            grad.addColorStop(1, 'rgba(52, 152, 219, 0.1)'); 
+            grad.addColorStop(0, "rgba(231, 76, 60, 0.3)");
+            grad.addColorStop(1, "rgba(52, 152, 219, 0.1)");
             ctx.fillStyle = grad;
             ctx.fillRect(left, top, width, height);
 
             ctx.strokeStyle = "rgba(0,0,0,0.8)";
             ctx.lineWidth = 4;
 
-            //This calculates the pixel locations for the edge of the strike zone box
+            // calculate the pixel locations for the edge of the strike zone box.
             const xLeft = x.getPixelForValue(-0.85);
             const xRight = x.getPixelForValue(0.85);
             const yTop = y.getPixelForValue(3.5);
             const yBot = y.getPixelForValue(1.5);
-            //This is the box for the strike zone
+
+            // draw the outer strike zone box.
             ctx.strokeRect(xLeft, yTop, xRight - xLeft, yBot - yTop);
 
             ctx.setLineDash([5, 5]);
             ctx.lineWidth = 1;
             ctx.beginPath();
 
-            //Vertical lines in the zone
-            ctx.moveTo(x.getPixelForValue(-0.28), yTop); ctx.lineTo(x.getPixelForValue(-0.28), yBot);
-            ctx.moveTo(x.getPixelForValue(0.28), yTop); ctx.lineTo(x.getPixelForValue(0.28), yBot);
-            //Horizontal Lines
-            ctx.moveTo(xLeft, y.getPixelForValue(2.83)); ctx.lineTo(xRight, y.getPixelForValue(2.83));
-            ctx.moveTo(xLeft, y.getPixelForValue(2.16)); ctx.lineTo(xRight, y.getPixelForValue(2.16));
-            ctx.stroke(); //Draws it
-            ctx.setLineDash([]); //Reset the line style so other parts of the chart dont get dashed out
+            // vertical lines in the zone.
+            ctx.moveTo(x.getPixelForValue(-0.28), yTop);
+            ctx.lineTo(x.getPixelForValue(-0.28), yBot);
+            ctx.moveTo(x.getPixelForValue(0.28), yTop);
+            ctx.lineTo(x.getPixelForValue(0.28), yBot);
+
+            // horizontal lines in the zone.
+            ctx.moveTo(xLeft, y.getPixelForValue(2.83));
+            ctx.lineTo(xRight, y.getPixelForValue(2.83));
+            ctx.moveTo(xLeft, y.getPixelForValue(2.16));
+            ctx.lineTo(xRight, y.getPixelForValue(2.16));
+            ctx.stroke();
+
+            // reset the dashed line style so other parts of the chart are unaffected.
+            ctx.setLineDash([]);
         }
     };
-    //This part creates the chart with Chart.js. WE have 2 feet on either side of the zone, a ratio of 0.8 so that it is a taller zone, 
+
+    // create the chart with Chart.js.
     locationChart = new Chart(ctx, {
-        type: 'scatter',
-        data: { datasets: Object.values(datasets) },//make the data an array
+        type: "scatter",
+        data: { datasets: Object.values(datasets) },
         plugins: [strikeZonePlugin],
         options: {
             aspectRatio: 0.8,
             scales: {
-                x: { 
-                    min: -2.2, 
-                    max: 2.2, 
+                x: {
+                    min: -2.2,
+                    max: 2.2,
                     title: { display: true, text: "Horizontal (ft)" },
-                    grid: { display: false }  // hide grid lines
+                    grid: { display: false }
                 },
-                y: { 
-                    min: 0, //This is the plate
-                    max: 5, // the zone is 5 feet tall
+                y: {
+                    min: 0,
+                    max: 5,
                     title: { display: true, text: "Height (ft)" },
-                    grid: { display: false } 
+                    grid: { display: false }
                 }
             },
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { position: "bottom" }
             }
         }
     });
