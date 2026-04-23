@@ -146,6 +146,11 @@ To fully utilize all features, your CSV should include:
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
-Developed as a **baseball analytics project** combining sports performance and data science.
+Luke Davis
+Morgan Dehoff
+Josh Desmond
+Trey Rios
+
+
