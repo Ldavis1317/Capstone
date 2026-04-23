@@ -148,9 +148,9 @@ To fully utilize all features, your CSV should include:
 
 ## 👨‍💻 Authors
 
-Luke Davis
-Morgan Dehoff
-Josh Desmond
+Luke Davis,
+Morgan Dehoff,
+Josh Desmond, and
 Trey Rios
 
 
